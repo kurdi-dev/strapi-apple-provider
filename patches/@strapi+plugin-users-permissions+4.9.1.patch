@@ -1,0 +1,578 @@
+diff --git a/node_modules/@strapi/plugin-users-permissions/admin/src/components/FormModal/Input/index.js b/node_modules/@strapi/plugin-users-permissions/admin/src/components/FormModal/Input/index.js
+index dc3424b..bd84ce4 100644
+--- a/node_modules/@strapi/plugin-users-permissions/admin/src/components/FormModal/Input/index.js
++++ b/node_modules/@strapi/plugin-users-permissions/admin/src/components/FormModal/Input/index.js
+@@ -6,7 +6,7 @@
+ 
+ import React from 'react';
+ import { useIntl } from 'react-intl';
+-import { ToggleInput, TextInput } from '@strapi/design-system';
++import { ToggleInput, TextInput, Textarea } from '@strapi/design-system';
+ import PropTypes from 'prop-types';
+ 
+ const Input = ({
+@@ -22,8 +22,6 @@ const Input = ({
+   value,
+ }) => {
+   const { formatMessage } = useIntl();
+-  const inputValue =
+-    name === 'noName' ? `${strapi.backendURL}/api/connect/${providerToEditName}/callback` : value;
+   
+   const label = formatMessage(
+     { id: intlLabel.id, defaultMessage: intlLabel.defaultMessage },
+@@ -68,9 +66,9 @@ const Input = ({
+     : '';
+ 
+   const errorMessage = error ? formatMessage({ id: error, defaultMessage: error }) : '';
+-
++  const InputComponent = type === 'textarea' ? Textarea : TextInput;
+   return (
+-    <TextInput
++    <InputComponent
+       aria-label={name}
+       disabled={disabled}
+       error={errorMessage}
+@@ -79,7 +77,7 @@ const Input = ({
+       onChange={onChange}
+       placeholder={formattedPlaceholder}
+       type={type}
+-      value={inputValue}
++      value={value}
+     />
+   );
+ };
+diff --git a/node_modules/@strapi/plugin-users-permissions/admin/src/components/FormModal/index.js b/node_modules/@strapi/plugin-users-permissions/admin/src/components/FormModal/index.js
+index da90f71..795d846 100644
+--- a/node_modules/@strapi/plugin-users-permissions/admin/src/components/FormModal/index.js
++++ b/node_modules/@strapi/plugin-users-permissions/admin/src/components/FormModal/index.js
+@@ -68,7 +68,8 @@ const FormModal = ({
+                               {...input}
+                               error={errors[input.name]}
+                               onChange={handleChange}
+-                              value={values[input.name]}
++                              value={
++                                input.name === 'noName' ? values.redirectUri : values[input.name]}
+                               providerToEditName={providerToEditName}
+                             />
+                           </GridItem>
+diff --git a/node_modules/@strapi/plugin-users-permissions/admin/src/pages/Providers/index.js b/node_modules/@strapi/plugin-users-permissions/admin/src/pages/Providers/index.js
+index 7772354..879d3e1 100644
+--- a/node_modules/@strapi/plugin-users-permissions/admin/src/pages/Providers/index.js
++++ b/node_modules/@strapi/plugin-users-permissions/admin/src/pages/Providers/index.js
+@@ -127,6 +127,10 @@ export const ProvidersPage = () => {
+       return forms.email;
+     }
+ 
++    if (providerToEditName === 'apple') {
++      return forms.providerApple;
++    }
++
+     if (isProviderWithSubdomain) {
+       return forms.providersWithSubdomain;
+     }
+diff --git a/node_modules/@strapi/plugin-users-permissions/admin/src/pages/Providers/utils/forms.js b/node_modules/@strapi/plugin-users-permissions/admin/src/pages/Providers/utils/forms.js
+index 71fe4c5..1dd77e5 100644
+--- a/node_modules/@strapi/plugin-users-permissions/admin/src/pages/Providers/utils/forms.js
++++ b/node_modules/@strapi/plugin-users-permissions/admin/src/pages/Providers/utils/forms.js
+@@ -3,6 +3,15 @@ import { translatedErrors } from '@strapi/helper-plugin';
+ 
+ import { getTrad } from '../../../utils';
+ 
++const replaceFields = (list, fields) =>
++  list.map((items) => items.map((field) => ({ ...field, ...fields[field.name] })));
++
++const insertFields = (list, index, ...items) => [
++  ...list.slice(0, index),
++  ...items,
++  ...list.slice(index),
++];
++
+ const callbackLabel = {
+   id: getTrad('PopUpForm.Providers.redirectURL.front-end.label'),
+   defaultMessage: 'The redirect URL to your front-end app',
+@@ -34,6 +43,107 @@ const secretLabel = {
+   defaultMessage: 'Client Secret',
+ };
+ 
++const teamIdLabel = {
++  id: getTrad('PopUpForm.Providers.apple.teamId'),
++  defaultMessage: 'Team ID',
++};
++const keyIdentifierLabel = {
++  id: getTrad('PopUpForm.Providers.apple.keyIdentifier'),
++  defaultMessage: 'Key ID',
++};
++const privateKeyPlaceholder = {
++  id: getTrad('PopUpForm.Providers.privateKey.placeholder'),
++  defaultMessage: `\
++-----BEGIN PRIVATE KEY-----
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
++AAAAAAAA
++-----END PRIVATE KEY-----`,
++};
++
++const commonFields = [
++  [
++    {
++      intlLabel: enabledLabel,
++      name: 'enabled',
++      type: 'bool',
++      description: enabledDescription,
++      size: 6,
++      validations: {
++        required: true,
++      },
++    },
++  ],
++  [
++    {
++      intlLabel: keyLabel,
++      name: 'key',
++      type: 'text',
++      placeholder: textPlaceholder,
++      size: 12,
++      validations: {
++        required: true,
++      },
++    },
++  ],
++  [
++    {
++      intlLabel: secretLabel,
++      name: 'secret',
++      type: 'text',
++      placeholder: textPlaceholder,
++      size: 12,
++      validations: {
++        required: true,
++      },
++    },
++  ],
++  [
++    {
++      intlLabel: callbackLabel,
++      placeholder: callbackPlaceholder,
++      name: 'callback',
++      type: 'text',
++      size: 12,
++      validations: {
++        required: true,
++      },
++    },
++  ],
++  [
++    {
++      intlLabel: hintLabel,
++      name: 'noName',
++      type: 'text',
++      validations: {},
++      size: 12,
++      disabled: true,
++    },
++  ],
++];
++
++const commonSchema = {
++  enabled: yup.bool().required(translatedErrors.required),
++  key: yup.string().when('enabled', {
++    is: true,
++    then: yup.string().required(translatedErrors.required),
++    otherwise: yup.string(),
++  }),
++  secret: yup.string().when('enabled', {
++    is: true,
++    then: yup.string().required(translatedErrors.required),
++    otherwise: yup.string(),
++  }),
++  callback: yup.string().when('enabled', {
++    is: true,
++    then: yup.string().required(translatedErrors.required),
++    otherwise: yup.string(),
++  }),
++};
++
++const BEFORE_CALLBACK_INDEX = commonFields.findIndex(([{ name }]) => name === 'callback');
++
+ const forms = {
+   email: {
+     form: [
+@@ -55,104 +165,54 @@ const forms = {
+       enabled: yup.bool().required(translatedErrors.required),
+     }),
+   },
++
+   providers: {
+-    form: [
+-      [
+-        {
+-          intlLabel: enabledLabel,
+-          name: 'enabled',
+-          type: 'bool',
+-          description: enabledDescription,
+-          size: 6,
+-          validations: {
+-            required: true,
+-          },
+-        },
+-      ],
+-      [
+-        {
+-          intlLabel: keyLabel,
+-          name: 'key',
+-          type: 'text',
+-          placeholder: textPlaceholder,
+-          size: 12,
+-          validations: {
+-            required: true,
+-          },
+-        },
+-      ],
+-      [
+-        {
+-          intlLabel: secretLabel,
+-          name: 'secret',
+-          type: 'text',
+-          placeholder: textPlaceholder,
+-          size: 12,
+-          validations: {
+-            required: true,
+-          },
++    form: commonFields,
++    schema: yup.object().shape({ ...commonSchema }),
++  },
++
++  providersWithSubdomain: {
++    form: insertFields(commonFields, BEFORE_CALLBACK_INDEX, [
++      {
++        intlLabel: {
++          id: getTrad('PopUpForm.Providers.subdomain.label'),
++          defaultMessage: 'Host URI (Subdomain)',
+         },
+-      ],
+-      [
+-        {
+-          intlLabel: callbackLabel,
+-          placeholder: callbackPlaceholder,
+-          name: 'callback',
+-          type: 'text',
+-          size: 12,
+-          validations: {
+-            required: true,
+-          },
++        name: 'subdomain',
++        type: 'text',
++        placeholder: {
++          id: getTrad('PopUpForm.Providers.subdomain.placeholder'),
++          defaultMessage: 'my.subdomain.com',
+         },
+-      ],
+-      [
+-        {
+-          intlLabel: hintLabel,
+-          name: 'noName',
+-          type: 'text',
+-          validations: {},
+-          size: 12,
+-          disabled: true,
++        size: 12,
++        validations: {
++          required: true,
+         },
+-      ],
+-    ],
++      },
++    ]),
+     schema: yup.object().shape({
+-      enabled: yup.bool().required(translatedErrors.required),
+-      key: yup.string().when('enabled', {
+-        is: true,
+-        then: yup.string().required(translatedErrors.required),
+-        otherwise: yup.string(),
+-      }),
+-      secret: yup.string().when('enabled', {
+-        is: true,
+-        then: yup.string().required(translatedErrors.required),
+-        otherwise: yup.string(),
+-      }),
+-      callback: yup.string().when('enabled', {
++      ...commonSchema,
++      subdomain: yup.string().when('enabled', {
+         is: true,
+         then: yup.string().required(translatedErrors.required),
+         otherwise: yup.string(),
+       }),
+     }),
+   },
+-  providersWithSubdomain: {
+-    form: [
+-      [
+-        {
+-          intlLabel: enabledLabel,
+-          name: 'enabled',
+-          type: 'bool',
+-          description: enabledDescription,
+-          size: 6,
+-          validations: {
+-            required: true,
+-          },
++
++  providerApple: {
++    form: insertFields(
++      replaceFields(commonFields, {
++        secret: {
++          type: 'textarea',
++          placeholder: privateKeyPlaceholder,
+         },
+-      ],
++      }),
++      BEFORE_CALLBACK_INDEX,
+       [
+         {
+-          intlLabel: keyLabel,
+-          name: 'key',
++          intlLabel: teamIdLabel,
++          name: 'teamId',
+           type: 'text',
+           placeholder: textPlaceholder,
+           size: 12,
+@@ -163,8 +223,8 @@ const forms = {
+       ],
+       [
+         {
+-          intlLabel: secretLabel,
+-          name: 'secret',
++          intlLabel: keyIdentifierLabel,
++          name: 'keyIdentifier',
+           type: 'text',
+           placeholder: textPlaceholder,
+           size: 12,
+@@ -172,82 +232,16 @@ const forms = {
+             required: true,
+           },
+         },
+-      ],
+-      [
+-        {
+-          intlLabel: {
+-            id: getTrad({ id: 'PopUpForm.Providers.jwksurl.label' }),
+-            defaultMessage: 'JWKS URL',
+-          },
+-          name: 'jwksurl',
+-          type: 'text',
+-          placeholder: textPlaceholder,
+-          size: 12,
+-          validations: {
+-            required: false,
+-          },
+-        },
+-      ],
+-
+-      [
+-        {
+-          intlLabel: {
+-            id: getTrad('PopUpForm.Providers.subdomain.label'),
+-            defaultMessage: 'Host URI (Subdomain)',
+-          },
+-          name: 'subdomain',
+-          type: 'text',
+-          placeholder: {
+-            id: getTrad('PopUpForm.Providers.subdomain.placeholder'),
+-            defaultMessage: 'my.subdomain.com',
+-          },
+-          size: 12,
+-          validations: {
+-            required: true,
+-          },
+-        },
+-      ],
+-      [
+-        {
+-          intlLabel: callbackLabel,
+-          placeholder: callbackPlaceholder,
+-          name: 'callback',
+-          type: 'text',
+-          size: 12,
+-          validations: {
+-            required: true,
+-          },
+-        },
+-      ],
+-      [
+-        {
+-          intlLabel: hintLabel,
+-          name: 'noName',
+-          type: 'text',
+-          validations: {},
+-          size: 12,
+-          disabled: true,
+-        },
+-      ],
+-    ],
++      ]
++    ),
+     schema: yup.object().shape({
+-      enabled: yup.bool().required(translatedErrors.required),
+-      key: yup.string().when('enabled', {
+-        is: true,
+-        then: yup.string().required(translatedErrors.required),
+-        otherwise: yup.string(),
+-      }),
+-      secret: yup.string().when('enabled', {
+-        is: true,
+-        then: yup.string().required(translatedErrors.required),
+-        otherwise: yup.string(),
+-      }),
+-      subdomain: yup.string().when('enabled', {
++      ...commonSchema,
++      teamId: yup.string().when('enabled', {
+         is: true,
+         then: yup.string().required(translatedErrors.required),
+         otherwise: yup.string(),
+       }),
+-      callback: yup.string().when('enabled', {
++      keyIdentifier: yup.string().when('enabled', {
+         is: true,
+         then: yup.string().required(translatedErrors.required),
+         otherwise: yup.string(),
+@@ -255,5 +249,4 @@ const forms = {
+     }),
+   },
+ };
+-
+ export default forms;
+diff --git a/node_modules/@strapi/plugin-users-permissions/server/bootstrap/grant-config.js b/node_modules/@strapi/plugin-users-permissions/server/bootstrap/grant-config.js
+index 31c612c..7b1b36d 100644
+--- a/node_modules/@strapi/plugin-users-permissions/server/bootstrap/grant-config.js
++++ b/node_modules/@strapi/plugin-users-permissions/server/bootstrap/grant-config.js
+@@ -29,6 +29,22 @@ module.exports = (baseURL) => ({
+     callback: `${baseURL}/google/callback`,
+     scope: ['email'],
+   },
++  apple: {
++    enabled: false,
++    icon: 'apple',
++    key: '',
++    secret: '',
++    teamId: '',
++    keyIdentifier: '',
++    callback: `${baseURL}/apple/callback`,
++    scope: ['name', 'email'],
++    nonce: true,
++    state: true,
++    custom_params: {
++      response_type: 'code id_token',
++      response_mode: 'form_post',
++    },
++  },
+   github: {
+     enabled: false,
+     icon: 'github',
+diff --git a/node_modules/@strapi/plugin-users-permissions/server/controllers/auth.js b/node_modules/@strapi/plugin-users-permissions/server/controllers/auth.js
+index cb73abd..572a802 100644
+--- a/node_modules/@strapi/plugin-users-permissions/server/controllers/auth.js
++++ b/node_modules/@strapi/plugin-users-permissions/server/controllers/auth.js
+@@ -199,6 +199,18 @@ module.exports = {
+       grantConfig[provider].callback;
+     grantConfig[provider].redirect_uri = getService('providers').buildRedirectUri(provider);
+ 
++    if (provider === 'apple') {
++      grantConfig.apple = {
++        ...grantConfig.apple,
++        secret: getService('providers').createAppleSecret({
++          key: grantConfig.apple.key,
++          teamId: grantConfig.apple.teamId,
++          keyIdentifier: grantConfig.apple.keyIdentifier,
++          privateKey: grantConfig.apple.secret,
++        }),
++      };
++    }
++    
+     return grant(grantConfig)(ctx, next);
+   },
+ 
+diff --git a/node_modules/@strapi/plugin-users-permissions/server/routes/content-api/auth.js b/node_modules/@strapi/plugin-users-permissions/server/routes/content-api/auth.js
+index bb34782..dec8aaf 100644
+--- a/node_modules/@strapi/plugin-users-permissions/server/routes/content-api/auth.js
++++ b/node_modules/@strapi/plugin-users-permissions/server/routes/content-api/auth.js
+@@ -10,6 +10,15 @@ module.exports = [
+       prefix: '',
+     },
+   },
++  {
++    method: 'POST',
++    path: '/connect/(.*)',
++    handler: 'auth.connect',
++    config: {
++      middlewares: ['plugin::users-permissions.rateLimit'],
++      prefix: '',
++    },
++  },
+   {
+     method: 'POST',
+     path: '/auth/local',
+diff --git a/node_modules/@strapi/plugin-users-permissions/server/services/providers-registry.js b/node_modules/@strapi/plugin-users-permissions/server/services/providers-registry.js
+index 6743f57..4c191be 100644
+--- a/node_modules/@strapi/plugin-users-permissions/server/services/providers-registry.js
++++ b/node_modules/@strapi/plugin-users-permissions/server/services/providers-registry.js
+@@ -302,6 +302,20 @@ const getInitialProviders = ({ purest }) => ({
+         };
+       });
+   },
++  async apple({ query }) {
++    // get the id_token
++    const idToken = query.id_token;
++    // decode the jwt token
++    const tokenPayload = jwt.decode(idToken);
++    if (!tokenPayload) {
++      throw new Error('unable to decode jwt token');
++    } else {
++      return {
++        username: tokenPayload.sub,
++        email: tokenPayload.email,
++      };
++    }
++  },
+   async patreon({ accessToken }) {
+     const patreon = purest({
+       provider: 'patreon',
+diff --git a/node_modules/@strapi/plugin-users-permissions/server/services/providers.js b/node_modules/@strapi/plugin-users-permissions/server/services/providers.js
+index 1907f88..b03c254 100644
+--- a/node_modules/@strapi/plugin-users-permissions/server/services/providers.js
++++ b/node_modules/@strapi/plugin-users-permissions/server/services/providers.js
+@@ -7,6 +7,7 @@
+ // Public node modules.
+ const _ = require('lodash');
+ const urlJoin = require('url-join');
++const jwt = require('jsonwebtoken');
+ 
+ const { getAbsoluteServerUrl } = require('@strapi/utils');
+ const { getService } = require('../utils');
+@@ -108,8 +109,26 @@ module.exports = ({ strapi }) => {
+     return urlJoin(getAbsoluteServerUrl(strapi.config), apiPrefix, 'connect', provider, 'callback');
+   };
+ 
++  const createAppleSecret = ({ key, teamId, keyIdentifier, secret }) => {
++    const headers = {
++      kid: keyIdentifier,
++      typ: undefined,
++    };
++    const claims = {
++      iss: teamId,
++      aud: 'https://appleid.apple.com',
++      sub: key,
++    };
++    return jwt.sign(claims, secret, {
++      algorithm: 'ES256',
++      header: headers,
++      expiresIn: strapi.config.get('plugin.users-permissions.jwt.expiresIn'),
++    });
++  };
++
+   return {
+     connect,
+     buildRedirectUri,
++    createAppleSecret,
+   };
+ };
